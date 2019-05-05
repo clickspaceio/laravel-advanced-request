@@ -7,7 +7,6 @@ trait ControllerMethods
 
     public function index()
     {
-        dd('teste');
         $request = app('request');
         $resourceOptions = $this->parseResourceOptions($request);
 
