@@ -7,10 +7,13 @@ trait ControllerMethods
 
     public function index()
     {
-
-        $resourceOptions = $this->parseResourceOptions(app('request'));
+        $request = app('request');
+        $resourceOptions = $this->parseResourceOptions($request);
 
         $query = $this->model::query();
+        if(isset($this->defaultFilter) && $this->defaultFilter){
+            $query->where($this->defaultFilter['key'], $request[$this->defaultFilter['relationship']]->sid);
+        }
         $this->applyResourceOptions($query, $resourceOptions);
         $results = $query->paginate($resourceOptions['limit'])->appends($resourceOptions);
 
@@ -19,8 +22,12 @@ trait ControllerMethods
 
     public function show($id)
     {
-        $resourceOptions = $this->parseResourceOptions(app('request'));
+        $request = app('request');
+        $resourceOptions = $this->parseResourceOptions($request);
         $query = $this->model::where('id', $id);
+        if(isset($this->defaultFilter) && $this->defaultFilter){
+            $query->where($this->defaultFilter['key'], $request[$this->defaultFilter['relationship']]->sid);
+        }
         $this->applyResourceOptions($query, $resourceOptions);
         $results = $query->firstOrFail();
         return new $this->resource($results);
