@@ -14,6 +14,9 @@ trait ControllerMethods
         if(isset($this->defaultFilter) && $this->defaultFilter){
             $query->where($this->defaultFilter['key'], $request[$this->defaultFilter['relationship']]->sid);
         }
+        if(isset($this->defaultIncludes) && $this->defaultIncludes){
+            $query->with($this->defaultIncludes);
+        }
         $this->applyResourceOptions($query, $resourceOptions);
         $results = $query->paginate($resourceOptions['limit'])->appends($resourceOptions);
 
