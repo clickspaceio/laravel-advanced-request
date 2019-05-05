@@ -93,12 +93,14 @@ trait EloquentBuilder
      */
     protected function parseResourceOptions($request)
     {
+        dd($this->defaults['includes']);
         $this->defaults = array_merge([
+            'includes' => [],
             'limit' => null,
             'page' => null,
             'mode' => 'embed'
         ], $this->defaults);
-
+        $includes = $this->parseIncludes($request->get('includes', $this->defaults['includes']));
         $limit = $request->get('limit', $this->defaults['limit']);
         $page = $request->get('page', $this->defaults['page']);
 
@@ -110,6 +112,8 @@ trait EloquentBuilder
             $limit = $this->maxValues['limit'];
 
         return [
+            'includes' => $includes['includes'],
+            'modes' => $includes['modes'],
             'limit' => (integer)$limit,
             'page' => (integer)$page
         ];
