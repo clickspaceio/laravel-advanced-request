@@ -14,11 +14,6 @@ class BaseModel extends \Illuminate\Database\Eloquent\Model
         parent::__construct($attributes);
     }
 
-    public function getKeyName()
-    {
-        return 'id';
-    }
-
     public static $allowableRelationships = [];
     public static $allowableFilters = [];
     public static $defaultIncludes = [];

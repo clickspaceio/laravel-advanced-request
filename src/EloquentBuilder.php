@@ -96,9 +96,7 @@ trait EloquentBuilder
         $this->defaults = array_merge([
             'limit' => null,
             'page' => null,
-            'mode' => 'embed'
         ], $this->defaults);
-
         $limit = $request->get('limit', $this->defaults['limit']);
         $page = $request->get('page', $this->defaults['page']);
 
