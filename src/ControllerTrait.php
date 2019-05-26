@@ -8,7 +8,6 @@ trait ControllerTrait
     protected $resource = DefaultResource::class;
     protected $countResource = null;
 
-    protected $uuids = [];
     protected $allowableFilters = [];
     protected $allowableRelationships = [];
 

@@ -230,125 +230,161 @@ trait EloquentBuilder
     }
 
     /**
-     * @param $queryBuilder
-     * @param array $filter
-     * @param bool|false $or
-     * @param array $joins
+     * @param $query
+     * @param $allowableFilters
+     * @param array $filters
+     * @return mixed
      */
-    protected function applyFilter($queryBuilder, array $filter, $or = false, array &$joins)
-    {
-        extract($filter);
+//    protected function applyFilter($queryBuilder, array $filter, $or = false, array &$joins)
+//    {
+//        extract($filter);
+//
+//        $dbType = $queryBuilder->getConnection()->getDriverName();
+//
+//        $table = $queryBuilder->getModel()->getTable();
+//
+//        if (in_array($key, $this->model::$uuidAttributes)) {
+//            if (is_array($value)) {
+//                $model = $this->model;
+//                $value = array_map(function ($value) use ($model) {
+//                    return $model::encodeUuid($value);
+//                }, $value);
+//            } else {
+//                $value = $this->model::encodeUuid($value);
+//            }
+//        }
+//
+//        $relationships = null;
+//        if (strpos($key, ".")) {
+//            $relationships = explode(".", $key);
+//            array_splice($relationships, count($relationships)-1);
+//        }
+//
+//        if ($value === 'null' || $value === '') {
+//            $method = $not ? 'WhereNotNull' : 'WhereNull';
+//
+//            //call_user_func([$queryBuilder, $method], sprintf('%s.%s', $table, $key));
+//            $this->callFilter($queryBuilder, $method, $table, $key, null, null, null, $relationships);
+//
+//        } else {
+//            $method = filter_var($or, FILTER_VALIDATE_BOOLEAN) ? 'orWhere' : 'where';
+//            $clauseOperator = null;
+//            $fieldFormat = null;
+//
+//            if (!isset($operator))
+//                $operator = 'eq';
+//
+//            switch($operator) {
+//                case 'ct':
+//                case 'sw':
+//                case 'ew':
+//                    $valueString = [
+//                        'ct' => '%'.$value.'%', // contains
+//                        'ew' => '%'.$value, // ends with
+//                        'sw' => $value.'%' // starts with
+//                    ];
+//
+//                    $castToText = (($dbType === 'postgres') ? 'TEXT' : 'CHAR');
+//                    //$databaseField = DB::raw(sprintf('CAST(%s.%s AS ' . $castToText . ')', $table, $key));
+//                    $fieldFormat = 'CAST(%s.%s AS ' . $castToText . ')';
+//                    $clauseOperator = ($not ? 'NOT':'') . (($dbType === 'postgres') ? 'ILIKE' : 'LIKE');
+//                    $value = $valueString[$operator];
+//                    break;
+//                case 'eq':
+//                default:
+//                    $clauseOperator = $not ? '!=' : '=';
+//                    break;
+//                case 'gt':
+//                    $clauseOperator = $not ? '<' : '>';
+//                    break;
+//                case 'gteq':
+//                    $clauseOperator = $not ? '<' : '>=';
+//                    break;
+//                case 'lteq':
+//                    $clauseOperator = $not ? '>' : '<=';
+//                    break;
+//                case 'lt':
+//                    $clauseOperator = $not ? '>' : '<';
+//                    break;
+//                case 'in':
+//                    if ($or === true) {
+//                        $method = $not === true ? 'orWhereNotIn' : 'orWhereIn';
+//                    } else {
+//                        $method = $not === true ? 'whereNotIn' : 'whereIn';
+//                    }
+//                    $clauseOperator = false;
+//                    break;
+//                case 'bt':
+//                    if ($or === true) {
+//                        $method = $not === true ? 'orWhereNotBetween' : 'orWhereBetween';
+//                    } else {
+//                        $method = $not === true ? 'whereNotBetween' : 'whereBetween';
+//                    }
+//                    $clauseOperator = false;
+//                    break;
+//            }
+//
+//            $customFilterMethod = $this->hasCustomMethod('filter', $key);
+//            if ($customFilterMethod) {
+//                call_user_func_array([$this, $customFilterMethod], [
+//                    $queryBuilder,
+//                    $method,
+//                    $clauseOperator,
+//                    $value,
+//                    $clauseOperator // @deprecated. Here for backwards compatibility
+//                ]);
+//
+//                // column to join.
+//                // trying to join within a nested where will get the join ignored.
+//                $joins[] = $key;
+//            } else {
+//                // In operations do not have an operator
+//                if (in_array($operator, ['in', 'bt'])) {
+//                    // $this->callFilter($queryBuilder, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships);
+//                    call_user_func_array([$queryBuilder, $method], [
+//                       $table.".".$key, $value
+//                    ]);
+//                } else {
+//                    $this->callFilter($queryBuilder, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships);
+//                }
+//            }
+//        }
+//    }
 
-        $dbType = $queryBuilder->getConnection()->getDriverName();
+    function applyFilter($query, $allowableFilters, $filters = []) {
+        foreach ($filters as $key => $filter) {
 
-        $table = $queryBuilder->getModel()->getTable();
+            $operator = '=';
+            $value = $filter;
+            $method = 'where';
 
-        if (in_array($key, $this->model::$uuidAttributes)) {
-            if (is_array($value)) {
-                $model = $this->model;
-                $value = array_map(function ($value) use ($model) {
-                    return $model::encodeUuid($value);
-                }, $value);
+            if(is_array($filter)){
+                $relationship = $key;
+                throw new \InvalidArgumentException("Filter in relationship {$relationship} is not allowable");
             } else {
-                $value = $this->model::encodeUuid($value);
-            }
-        }
-
-        $relationships = null;
-        if (strpos($key, ".")) {
-            $relationships = explode(".", $key);
-            array_splice($relationships, count($relationships)-1);
-        }
-
-        if ($value === 'null' || $value === '') {
-            $method = $not ? 'WhereNotNull' : 'WhereNull';
-
-            //call_user_func([$queryBuilder, $method], sprintf('%s.%s', $table, $key));
-            $this->callFilter($queryBuilder, $method, $table, $key, null, null, null, $relationships);
-
-        } else {
-            $method = filter_var($or, FILTER_VALIDATE_BOOLEAN) ? 'orWhere' : 'where';
-            $clauseOperator = null;
-            $fieldFormat = null;
-
-            if (!isset($operator))
-                $operator = 'eq';
-
-            switch($operator) {
-                case 'ct':
-                case 'sw':
-                case 'ew':
-                    $valueString = [
-                        'ct' => '%'.$value.'%', // contains
-                        'ew' => '%'.$value, // ends with
-                        'sw' => $value.'%' // starts with
-                    ];
-
-                    $castToText = (($dbType === 'postgres') ? 'TEXT' : 'CHAR');
-                    //$databaseField = DB::raw(sprintf('CAST(%s.%s AS ' . $castToText . ')', $table, $key));
-                    $fieldFormat = 'CAST(%s.%s AS ' . $castToText . ')';
-                    $clauseOperator = ($not ? 'NOT':'') . (($dbType === 'postgres') ? 'ILIKE' : 'LIKE');
-                    $value = $valueString[$operator];
-                    break;
-                case 'eq':
-                default:
-                    $clauseOperator = $not ? '!=' : '=';
-                    break;
-                case 'gt':
-                    $clauseOperator = $not ? '<' : '>';
-                    break;
-                case 'gteq':
-                    $clauseOperator = $not ? '<' : '>=';
-                    break;
-                case 'lteq':
-                    $clauseOperator = $not ? '>' : '<=';
-                    break;
-                case 'lt':
-                    $clauseOperator = $not ? '>' : '<';
-                    break;
-                case 'in':
-                    if ($or === true) {
-                        $method = $not === true ? 'orWhereNotIn' : 'orWhereIn';
-                    } else {
-                        $method = $not === true ? 'whereNotIn' : 'whereIn';
-                    }
-                    $clauseOperator = false;
-                    break;
-                case 'bt':
-                    if ($or === true) {
-                        $method = $not === true ? 'orWhereNotBetween' : 'orWhereBetween';
-                    } else {
-                        $method = $not === true ? 'whereNotBetween' : 'whereBetween';
-                    }
-                    $clauseOperator = false;
-                    break;
-            }
-
-            $customFilterMethod = $this->hasCustomMethod('filter', $key);
-            if ($customFilterMethod) {
-                call_user_func_array([$this, $customFilterMethod], [
-                    $queryBuilder,
-                    $method,
-                    $clauseOperator,
-                    $value,
-                    $clauseOperator // @deprecated. Here for backwards compatibility
-                ]);
-
-                // column to join.
-                // trying to join within a nested where will get the join ignored.
-                $joins[] = $key;
-            } else {
-                // In operations do not have an operator
-                if (in_array($operator, ['in', 'bt'])) {
-                    // $this->callFilter($queryBuilder, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships);
-                    call_user_func_array([$queryBuilder, $method], [
-                       $table.".".$key, $value
-                    ]);
-                } else {
-                    $this->callFilter($queryBuilder, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships);
+                if (in_array(substr($filter,0,2), ['>=', '<='])) {
+                    $operator = substr($filter,0,2);
+                    $value = str_replace($operator, '', $filter);
+                } elseif (in_array(substr($filter,0,1), ['>', '<'])) {
+                    $operator = substr($filter, 0, 1);
+                    $value = str_replace($operator, '', $filter);
                 }
             }
+
+
+            if ($operator === '='){
+                if($allowableFilters[$key] === 'text'){
+                    $operator = 'like';
+                    $value = "%{$value}%";
+                }
+            }
+
+            $query = call_user_func_array([$query, $method], [
+                $key, $operator, $value
+            ]);
         }
+
+        return $query;
     }
 
     /**
