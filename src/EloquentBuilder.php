@@ -351,7 +351,7 @@ trait EloquentBuilder
 //        }
 //    }
 
-    function applyFilter($query, $allowableFilters, $filters = []) {
+    protected function applyFilter($query, $allowableFilters, $filters = []) {
         foreach ($filters as $key => $filter) {
 
             $operator = '=';
