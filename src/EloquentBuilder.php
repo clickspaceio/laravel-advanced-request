@@ -121,7 +121,7 @@ trait EloquentBuilder
         foreach ($this->defaultRelationships as $relationship => $type){
             $relationships[] = $relationship;
         }
-        foreach ($options['includes'] as $relationship => $type){
+        foreach ($options['includes'] as $relationship){
             $relationships[] = $relationship;
         }
         $queryBuilder->with($relationships);
