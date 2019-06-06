@@ -9,17 +9,7 @@ trait ControllerMethods
     {
         $request = app('request');
         $resourceOptions = $this->parseResourceOptions($request);
-
-        $filters = $request->only(array_keys($this->allowableFilters));
-
         $query = $this->model::query();
-        if(isset($this->defaultFilter) && $this->defaultFilter){
-            $query->where($this->defaultFilter['key'], $request[$this->defaultFilter['relationship']]->sid);
-        }
-        if(isset($this->defaultIncludes) && $this->defaultIncludes){
-            $query->with($this->defaultIncludes);
-        }
-        $query = applyFilter($query, $this->allowableFilters, $filters);
         $this->applyResourceOptions($query, $resourceOptions);
         $results = $query->paginate($resourceOptions['limit'])->appends($resourceOptions);
 

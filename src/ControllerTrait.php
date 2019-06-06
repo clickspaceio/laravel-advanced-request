@@ -8,16 +8,15 @@ trait ControllerTrait
     protected $resource = DefaultResource::class;
     protected $countResource = null;
 
+    protected $defaultFilters = [];
+    protected $defaultRelationships = [];
+
     protected $allowableFilters = [];
     protected $allowableRelationships = [];
 
     protected $defaults = [
-        'includes' => [],
-        'sort' => [],
         'limit' => 50,
         'page' => 1,
-        'mode' => 'embed',
-        'filter_groups' => []
     ];
 
     protected $maxValues = [

@@ -2,7 +2,9 @@
 
 namespace Clickspace\AdvancedRequest;
 
+use Carbon\Carbon;
 use DB;
+use function foo\func;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use InvalidArgumentException;
@@ -51,43 +53,6 @@ trait EloquentBuilder
     }
 
     /**
-     * Parse filter group strings into filters
-     * Filters are formatted as key:operator(value)
-     * Example: name:eq(esben)
-     * @param  array $filter_groups
-     * @return array
-     */
-    protected function parseFilterGroups(array $filter_groups)
-    {
-        $return = [];
-        foreach ($filter_groups as $indexGroup => $group) {
-            if (!is_array($group) or !array_key_exists('filters', $group)) {
-                throw new \InvalidArgumentException('Filter group \'' . $indexGroup . '\' does not have the \'filters\' key.');
-            }
-            foreach ($group['filters'] as $indexFilter => $filter) {
-                if (!is_array($filter))
-                    throw new \InvalidArgumentException('Filter \'' . $indexFilter . '\' in group \'' . $indexGroup . '\' is not valid.');
-                if (!array_key_exists('key', $filter))
-                    throw new \InvalidArgumentException('Filter \'' . $indexFilter . '\' in group \'' . $indexGroup . '\' does not have the \'key\' key.');
-                if (!array_key_exists('value', $filter))
-                    throw new \InvalidArgumentException('Filter \'' . $indexFilter . '\' in group \'' . $indexGroup . '\' does not have the \'value\' key.');
-
-                if (!in_array($filter['key'], $this->model::$allowableFilters))
-                    throw new \InvalidArgumentException('Filter \'' . $indexFilter . '\' with key \'' . $filter['key'] . '\' in group \'' . $indexGroup . '\' is not allowed.');
-
-                if (!isset($filter['not'])) {
-                    $group['filters'][$indexFilter]['not'] = false;
-                }
-            }
-            $return[] = [
-                'filters' => $group['filters'],
-                'or' => isset($group['or']) ? $group['or'] : false
-            ];
-        }
-        return $return;
-    }
-
-    /**
      * Parse GET parameters into resource options
      * @return array
      */
@@ -96,9 +61,14 @@ trait EloquentBuilder
         $this->defaults = array_merge([
             'limit' => null,
             'page' => null,
+            'filters' => [],
+            'includes' => []
         ], $this->defaults);
+
         $limit = $request->get('limit', $this->defaults['limit']);
         $page = $request->get('page', $this->defaults['page']);
+        $filters = $request->only(array_keys($this->allowableFilters)) ?? $this->defaults['filters'];
+        $includes = array_filter($request->get('includes', $this->defaults['includes']), function ($include) { return in_array($include, array_keys($this->allowableRelationships)); });
 
         if ($page !== null && $limit === null) {
             throw new InvalidArgumentException('Cannot use page option without limit option');
@@ -109,7 +79,9 @@ trait EloquentBuilder
 
         return [
             'limit' => (integer)$limit,
-            'page' => (integer)$page
+            'page' => (integer)$page,
+            'filters' => $filters,
+            'includes' => $includes
         ];
     }
 
@@ -125,13 +97,103 @@ trait EloquentBuilder
             return $queryBuilder;
         }
 
-        extract($options);
+        $request = app('request');
 
-        if (isset($distinct)) {
+        if (array_key_exists('distinct', $options)) {
             $queryBuilder->distinct();
         }
 
+        foreach ($this->defaultFilters as $defaultFilter){
+            $queryBuilder->where($defaultFilter['key'], $request[$defaultFilter['relationship']]->sid);
+        }
+
+        foreach ($options['filters'] as $key => $value){
+
+
+            if (gettype($queryBuilder->getModel()->{$key}) != "NULL" and is_array($value) == true) {
+                $this->applyRelationshipFilter($queryBuilder, $key, $value);
+            } else {
+                $this->applyFilter($queryBuilder, $key, $value);
+            }
+        }
+
+        $relationships = [];
+        foreach ($this->defaultRelationships as $relationship => $type){
+            $relationships[] = $relationship;
+        }
+        foreach ($options['includes'] as $relationship => $type){
+            $relationships[] = $relationship;
+        }
+        $queryBuilder->with($relationships);
+
         return $queryBuilder;
+    }
+
+    protected function applyRelationshipFilter($query, $key, $request) {
+        $query->whereHas($key, function ($query) use ($request, $key) {
+            foreach ($request as $keyChild => $value) {
+                $this->applyFilter($query, $key.".".$keyChild, $value);
+            }
+        });
+    }
+
+    protected function applyFilter($query, $key, $value) {
+
+
+        if (!isset($this->allowableFilters[$key]))
+            return false;
+
+        $operator = '=';
+        $method = 'where';
+
+
+        if (in_array(substr($value,0,2), ['>=', '<='])) {
+            $operator = substr($value,0,2);
+            $value = str_replace($operator, '', $value);
+        } elseif (in_array(substr($value,0,1), ['>', '<'])) {
+            $operator = substr($value, 0, 1);
+            $value = str_replace($operator, '', $value);
+        } elseif (
+            $this->allowableFilters[$key] != 'text' and substr($value,0,1) == '[' and substr($value,-1,1) == ']') {
+            $method = 'whereBetween';
+            $value = explode(' and ', substr($value, 1, strlen($value)-2));
+        } elseif ($this->allowableFilters[$key] == 'enum') {
+            $method = 'whereIn';
+            $value = explode(',',$value);
+        } elseif ($value === 'null') {
+            $method = 'whereNull';
+            $operator = null;
+            $value = null;
+        }
+
+        if ($operator == '=' and $this->allowableFilters[$key] == 'text'){
+            $operator = 'like';
+            $value = "%{$value}%";
+        }
+
+        switch ($method) {
+            case 'whereBetween':
+                if ($this->allowableFilters[$key] == 'date') {
+                    if (trim(strlen($value[0])) == 10) {
+                        $value[0] .= " 00:00:00";
+                    }
+                    if (trim(strlen($value[1]) == 10)) {
+                        $value[1] .= " 23:59:59";
+                    }
+                }
+                $query->whereBetween($key, $value);
+                break;
+            case 'whereNull':
+                $query->whereNull($key);
+                break;
+            case 'whereIn':
+                $query->whereIn($key, $value);
+                break;
+            default:
+                $query->where($key, $operator, $value);
+        }
+
+        return $query;
     }
 
     /**
@@ -161,231 +223,6 @@ trait EloquentBuilder
      * @param array $previouslyJoined
      * @return array
      */
-    protected function applyFilterGroups($queryBuilder, array $filterGroups = [], array $previouslyJoined = [])
-    {
-        $joins = [];
-        foreach ($filterGroups as $group) {
-            $or = $group['or'];
-            $filters = $group['filters'];
-
-            $allowableFilters = $this->allowableFilters;
-
-            $queryBuilder->where(function (Builder $query) use ($filters, $or, &$joins, $allowableFilters) {
-                foreach ($filters as $filter) {
-                    if (in_array($filter, $allowableFilters))
-                        throw new InvalidArgumentException('Filters: \'' . $filter . '\' can not be used.');
-                    $this->applyFilter($query, $filter, $or, $joins);
-                }
-            });
-        }
-
-        foreach (array_diff($joins, $previouslyJoined) as $join) {
-            $this->joinRelatedModelIfExists($queryBuilder, $join);
-        }
-
-        return $joins;
-    }
-
-    protected function callFilter(Builder $query, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships) {
-
-        // If we do not assign database field, the customer filter method
-        // will fail when we execute it with parameters such as CAST(%s AS TEXT)
-        // key needs to be reserved
-        if (is_null($fieldFormat))
-            $fieldFormat = '%s.%s';
-
-
-        if (!$relationships) {
-
-            $databaseField = DB::raw(sprintf($fieldFormat, $table, $key));
-
-            if (is_null($clauseOperator)) {
-                if (is_null($value)) {
-                    call_user_func([$query, $method], $databaseField);
-                } else {
-                    call_user_func_array([$query, $method], [
-                        $databaseField, $value
-                    ]);
-                }
-            } else {
-                call_user_func_array([$query, $method], [
-                    $databaseField, $clauseOperator, $value
-                ]);
-            }
-
-        } else {
-            foreach ($relationships as $relationship) {
-                $key = str_replace($relationship.".", "", $key);
-            }
-
-            $query->whereHas($relationships[0], function ($query) use ($method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships) {
-                $relationship = $relationships[0];
-                array_splice($relationships, 0, 1);
-                $this->callFilter($query, $method, $relationship, $key, $fieldFormat, $clauseOperator, $value, $relationships);
-
-            });
-
-        }
-
-    }
-
-    /**
-     * @param $query
-     * @param $allowableFilters
-     * @param array $filters
-     * @return mixed
-     */
-//    protected function applyFilter($queryBuilder, array $filter, $or = false, array &$joins)
-//    {
-//        extract($filter);
-//
-//        $dbType = $queryBuilder->getConnection()->getDriverName();
-//
-//        $table = $queryBuilder->getModel()->getTable();
-//
-//        if (in_array($key, $this->model::$uuidAttributes)) {
-//            if (is_array($value)) {
-//                $model = $this->model;
-//                $value = array_map(function ($value) use ($model) {
-//                    return $model::encodeUuid($value);
-//                }, $value);
-//            } else {
-//                $value = $this->model::encodeUuid($value);
-//            }
-//        }
-//
-//        $relationships = null;
-//        if (strpos($key, ".")) {
-//            $relationships = explode(".", $key);
-//            array_splice($relationships, count($relationships)-1);
-//        }
-//
-//        if ($value === 'null' || $value === '') {
-//            $method = $not ? 'WhereNotNull' : 'WhereNull';
-//
-//            //call_user_func([$queryBuilder, $method], sprintf('%s.%s', $table, $key));
-//            $this->callFilter($queryBuilder, $method, $table, $key, null, null, null, $relationships);
-//
-//        } else {
-//            $method = filter_var($or, FILTER_VALIDATE_BOOLEAN) ? 'orWhere' : 'where';
-//            $clauseOperator = null;
-//            $fieldFormat = null;
-//
-//            if (!isset($operator))
-//                $operator = 'eq';
-//
-//            switch($operator) {
-//                case 'ct':
-//                case 'sw':
-//                case 'ew':
-//                    $valueString = [
-//                        'ct' => '%'.$value.'%', // contains
-//                        'ew' => '%'.$value, // ends with
-//                        'sw' => $value.'%' // starts with
-//                    ];
-//
-//                    $castToText = (($dbType === 'postgres') ? 'TEXT' : 'CHAR');
-//                    //$databaseField = DB::raw(sprintf('CAST(%s.%s AS ' . $castToText . ')', $table, $key));
-//                    $fieldFormat = 'CAST(%s.%s AS ' . $castToText . ')';
-//                    $clauseOperator = ($not ? 'NOT':'') . (($dbType === 'postgres') ? 'ILIKE' : 'LIKE');
-//                    $value = $valueString[$operator];
-//                    break;
-//                case 'eq':
-//                default:
-//                    $clauseOperator = $not ? '!=' : '=';
-//                    break;
-//                case 'gt':
-//                    $clauseOperator = $not ? '<' : '>';
-//                    break;
-//                case 'gteq':
-//                    $clauseOperator = $not ? '<' : '>=';
-//                    break;
-//                case 'lteq':
-//                    $clauseOperator = $not ? '>' : '<=';
-//                    break;
-//                case 'lt':
-//                    $clauseOperator = $not ? '>' : '<';
-//                    break;
-//                case 'in':
-//                    if ($or === true) {
-//                        $method = $not === true ? 'orWhereNotIn' : 'orWhereIn';
-//                    } else {
-//                        $method = $not === true ? 'whereNotIn' : 'whereIn';
-//                    }
-//                    $clauseOperator = false;
-//                    break;
-//                case 'bt':
-//                    if ($or === true) {
-//                        $method = $not === true ? 'orWhereNotBetween' : 'orWhereBetween';
-//                    } else {
-//                        $method = $not === true ? 'whereNotBetween' : 'whereBetween';
-//                    }
-//                    $clauseOperator = false;
-//                    break;
-//            }
-//
-//            $customFilterMethod = $this->hasCustomMethod('filter', $key);
-//            if ($customFilterMethod) {
-//                call_user_func_array([$this, $customFilterMethod], [
-//                    $queryBuilder,
-//                    $method,
-//                    $clauseOperator,
-//                    $value,
-//                    $clauseOperator // @deprecated. Here for backwards compatibility
-//                ]);
-//
-//                // column to join.
-//                // trying to join within a nested where will get the join ignored.
-//                $joins[] = $key;
-//            } else {
-//                // In operations do not have an operator
-//                if (in_array($operator, ['in', 'bt'])) {
-//                    // $this->callFilter($queryBuilder, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships);
-//                    call_user_func_array([$queryBuilder, $method], [
-//                       $table.".".$key, $value
-//                    ]);
-//                } else {
-//                    $this->callFilter($queryBuilder, $method, $table, $key, $fieldFormat, $clauseOperator, $value, $relationships);
-//                }
-//            }
-//        }
-//    }
-
-    protected function applyFilter($query, $allowableFilters, $filters = []) {
-        foreach ($filters as $key => $filter) {
-
-            $operator = '=';
-            $value = $filter;
-            $method = 'where';
-
-            if(is_array($filter)){
-                $relationship = $key;
-                throw new \InvalidArgumentException("Filter in relationship {$relationship} is not allowable");
-            } else {
-                if (in_array(substr($filter,0,2), ['>=', '<='])) {
-                    $operator = substr($filter,0,2);
-                    $value = str_replace($operator, '', $filter);
-                } elseif (in_array(substr($filter,0,1), ['>', '<'])) {
-                    $operator = substr($filter, 0, 1);
-                    $value = str_replace($operator, '', $filter);
-                }
-            }
-
-
-            if ($operator === '='){
-                if($allowableFilters[$key] === 'text'){
-                    $operator = 'like';
-                    $value = "%{$value}%";
-                }
-            }
-
-            $query = call_user_func_array([$query, $method], [
-                $key, $operator, $value
-            ]);
-        }
-
-        return $query;
-    }
 
     /**
      * @param $queryBuilder
