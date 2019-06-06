@@ -104,10 +104,8 @@ trait EloquentBuilder
         }
 
         //foreach ($this->defaultFilters as $defaultFilter){
-        if(array_key_exists('key', $this->defaultFilter)) {
-            $defaultFilter = $this->defaultFilter;
-            $queryBuilder->where($defaultFilter['key'], $request[$defaultFilter['relationship']]->sid);
-        }
+        $defaultFilter = $this->defaultFilter;
+        $queryBuilder->where($defaultFilter['key'], $request[$defaultFilter['relationship']]->sid);
 
         foreach ($options['filters'] as $key => $value){
 
