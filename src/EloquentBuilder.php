@@ -103,9 +103,10 @@ trait EloquentBuilder
             $queryBuilder->distinct();
         }
 
-        foreach ($this->defaultFilters as $defaultFilter){
-            $queryBuilder->where($defaultFilter['key'], $request[$defaultFilter['relationship']]->sid);
-        }
+        //foreach ($this->defaultFilters as $defaultFilter){
+        $defaultFilter = $this->defaultFilter;
+        $queryBuilder->where($defaultFilter['key'], $request[$defaultFilter['relationship']]->sid);
+        //}
 
         foreach ($options['filters'] as $key => $value){
 
