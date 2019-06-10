@@ -165,7 +165,7 @@ trait EloquentBuilder
                 $filters[$queryFilter] = $value;
         }
         if ($filters) {
-            $queryBuilder->orWhere(function ($queryBuilder) use ($filters) {
+            $queryBuilder->where(function ($queryBuilder) use ($filters) {
                 $this->applyFilters($queryBuilder, $filters, true);
             });
         } else {
