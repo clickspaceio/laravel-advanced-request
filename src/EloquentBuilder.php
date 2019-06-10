@@ -146,22 +146,26 @@ trait EloquentBuilder
         });
     }
 
-    protected function applyFilters($queryBuilder, $filters) {
-        foreach ($filters as $key => $value) {
-            if (gettype($queryBuilder->getModel()->{$key}) != "NULL" and is_array($value) == true) {
-                $this->applyRelationshipFilter($queryBuilder, $key, $value);
-            } else {
-                $this->applyFilter($queryBuilder, $key, $value);
+    protected function applyFilters($queryBuilder, $filters, $or = false) {
+        call_user_func([$queryBuilder, $or ? "orWhere" : "where"], function ($queryBuilder) use ($filters) {
+            foreach ($filters as $key => $value) {
+                if (gettype($queryBuilder->getModel()->{$key}) != "NULL" and is_array($value) == true) {
+                    $this->applyRelationshipFilter($queryBuilder, $key, $value);
+                } else {
+                    $this->applyFilter($queryBuilder, $key, $value);
+                }
             }
-        }
+        });
     }
 
     protected function applyQueryFilter($queryBuilder, $value) {
-        $filters = [];
-        foreach ($this->queryFilters as $queryFilter) {
-            $filters[$queryFilter] = $value;
-        }
-        $this->applyFilters($queryBuilder, $filters);
+        $queryBuilder->orWhere(function ($queryBuilder) use ($value) {
+            $filters = [];
+            foreach ($this->queryFilters as $queryFilter) {
+                $filters[$queryFilter] = $value;
+            }
+            $this->applyFilters($queryBuilder, $filters, true);
+        });
     }
 
     protected function applyFilter($query, $key, $value) {
