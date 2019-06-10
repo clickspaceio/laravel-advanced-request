@@ -112,7 +112,7 @@ trait EloquentBuilder
             $queryBuilder->distinct();
 
         if ($this->defaultFilter)
-            $this->applyFilters($queryBuilder, [ $this->defaultFilter['key'] => $request[$this->defaultFilter['relationship']]->sid ]);
+            $queryBuilder->where($this->defaultFilter['key'], $request[$this->defaultFilter['relationship']]->sid);
 
         if ($this->defaultFilters)
             $this->applyFilters($queryBuilder, $options['filters']);
