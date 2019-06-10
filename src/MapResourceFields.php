@@ -28,15 +28,29 @@ trait MapResourceFields
         };
 
         $code = "";
-        if (isset($this->resource::$mapFields)) {
-            foreach ($this->resource::$mapFields as $fieldResource => $field) {
-                if (!isset($response[$field]))
-                    continue;
+        if (isset($this->resource::$requestFields)) {
+            foreach ($this->resource::$requestFields as $fieldResource => $field) {
+//                if (!isset($response[$field]))
+//                    continue;
                 $code .= '$response';
                 foreach (explode(".", $fieldResource) as $path) {
                     $code .= "[\"$path\"]";
                 }
-                $code .= " = \"{$response[$field]}\";";
+                switch (gettype($response[$field])) {
+                    case 'NULL':
+                        $code .= " = null;";
+                        break;
+                    case 'integer':
+                    case 'double':
+                    case 'float':
+                        $code .= " = {$response[$field]};";
+                        break;
+                    case 'boolean':
+                        $code .= " = ".$response[$field]?"true":"false".";";
+                        break;
+                    default:
+                        $code .= " = \"{$response[$field]}\";";
+                }
                 unset($response[$field]);
             }
             eval($code);
