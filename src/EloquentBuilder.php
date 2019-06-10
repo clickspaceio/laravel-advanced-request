@@ -62,13 +62,18 @@ trait EloquentBuilder
             'limit' => null,
             'page' => null,
             'filters' => [],
-            'includes' => []
+            'query' => null,
+            'includes' => [],
+            'sorting' => null
         ], $this->defaults);
 
         $limit = $request->get('limit', $this->defaults['limit']);
         $page = $request->get('page', $this->defaults['page']);
         $filters = $request->only(array_keys($this->allowableFilters)) ?? $this->defaults['filters'];
-        $includes = array_filter($request->get('includes', $this->defaults['includes']), function ($include) { return in_array($include, array_keys($this->allowableRelationships)); });
+        $query = $request->get('query', $this->defaults['query']);
+        $includes = array_filter($request->get('includes', $this->defaults['includes']), function ($include) {
+            return in_array($include, array_keys($this->allowableRelationships));
+        });
 
         if ($page !== null && $limit === null) {
             throw new InvalidArgumentException('Cannot use page option without limit option');
@@ -77,11 +82,15 @@ trait EloquentBuilder
         if ($limit > $this->maxValues['limit'])
             $limit = $this->maxValues['limit'];
 
+        $sorting = null;
+
         return [
             'limit' => (integer)$limit,
             'page' => (integer)$page,
             'filters' => $filters,
-            'includes' => $includes
+            'query' => $query,
+            'includes' => $includes,
+            'sorting' => $sorting
         ];
     }
 
@@ -99,55 +108,64 @@ trait EloquentBuilder
 
         $request = app('request');
 
-        if (array_key_exists('distinct', $options)) {
+        if (array_key_exists('distinct', $options))
             $queryBuilder->distinct();
-        }
 
-        //foreach ($this->defaultFilters as $defaultFilter){
-        if(isset($this->defaultFilter) && array_key_exists('key', $this->defaultFilter)) {
-            $defaultFilter = $this->defaultFilter;
-            $queryBuilder->where($defaultFilter['key'], $request[$defaultFilter['relationship']]->sid);
-        }
+        if ($this->defaultFilter)
+            $this->applyFilters($queryBuilder, [ $this->defaultFilter['key'] => $request[$this->defaultFilter['relationship']]->sid ]);
 
-        foreach ($options['filters'] as $key => $value){
+        if ($this->defaultFilters)
+            $this->applyFilters($queryBuilder, $options['filters']);
 
+        if ($options['filters'])
+            $this->applyFilters($queryBuilder, $options['filters']);
 
+        if ($options['query'])
+            $this->applyQueryFilter($queryBuilder, $options['query']);
+
+        if ($this->defaultRelationships)
+            $this->applyIncludes($queryBuilder, array_keys($this->defaultRelationships));
+
+        if ($options['includes'])
+            $this->applyIncludes($queryBuilder, $options['includes']);
+
+        if ($options['sorting'])
+            $this->applySorting($queryBuilder, $options['sorting']);
+
+        return $queryBuilder;
+    }
+
+    protected function applyRelationshipFilter($query, $key, $request)
+    {
+        $query->whereHas($key, function ($query) use ($request, $key) {
+            foreach ($request as $keyChild => $value) {
+                $this->applyFilter($query, $key . "." . $keyChild, $value);
+            }
+        });
+    }
+
+    protected function applyFilters($queryBuilder, $filters) {
+        foreach ($filters as $key => $value) {
             if (gettype($queryBuilder->getModel()->{$key}) != "NULL" and is_array($value) == true) {
                 $this->applyRelationshipFilter($queryBuilder, $key, $value);
             } else {
                 $this->applyFilter($queryBuilder, $key, $value);
             }
         }
-
-        $relationships = [];
-        foreach ($this->defaultRelationships as $relationship => $type){
-            $relationships[] = $relationship;
-        }
-        foreach ($options['includes'] as $relationship){
-            $relationships[] = $relationship;
-        }
-        $queryBuilder->with($relationships);
-
-        return $queryBuilder;
     }
 
-    protected function applyRelationshipFilter($query, $key, $request) {
-        $query->whereHas($key, function ($query) use ($request, $key) {
-            foreach ($request as $keyChild => $value) {
-                $this->applyFilter($query, $key.".".$keyChild, $value);
-            }
-        });
+    protected function applyQueryFilter($queryBuilder, $value) {
+        $filters = [];
+        foreach ($this->queryFilters as $queryFilter) {
+            $filters[$queryFilter] = $value;
+        }
+        $this->applyFilters($queryBuilder, $filters);
     }
 
     protected function applyFilter($query, $key, $value) {
 
-
-        if (!isset($this->allowableFilters[$key]))
-            return false;
-
         $operator = '=';
         $method = 'where';
-
 
         if (in_array(substr($value,0,2), ['>=', '<='])) {
             $operator = substr($value,0,2);
@@ -232,17 +250,14 @@ trait EloquentBuilder
      * @param array $previouslyJoined
      * @return array
      */
-    protected function applySorting($queryBuilder, array $sorting, array $previouslyJoined = [])
+    protected function applySorting($queryBuilder, $sorting, array $previouslyJoined = [])
     {
         $joins = [];
+        $sorting = explode(',', $sorting);
         foreach($sorting as $sortRule) {
-            if (is_array($sortRule)) {
-                $key = $sortRule['key'];
-                $direction = mb_strtolower($sortRule['direction']) === 'asc' ? 'ASC' : 'DESC';
-            } else {
-                $key = $sortRule;
-                $direction = 'ASC';
-            }
+            $sortRule = explode('-', $sortRule);
+            $key = $sortRule[0];
+            $direction = mb_strtolower($sortRule[1]) === 'asc' ? 'ASC' : 'DESC';
 
             $customSortMethod = $this->hasCustomMethod('sort', $key);
             if ($customSortMethod) {

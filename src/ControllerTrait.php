@@ -8,11 +8,14 @@ trait ControllerTrait
     protected $resource = DefaultResource::class;
     protected $countResource = null;
 
+    protected $defaultFilter = null;
     protected $defaultFilters = [];
     protected $defaultRelationships = [];
 
     protected $allowableFilters = [];
     protected $allowableRelationships = [];
+
+    protected $queryFilters = [];
 
     protected $defaults = [
         'limit' => 50,
