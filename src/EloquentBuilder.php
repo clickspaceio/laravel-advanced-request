@@ -75,7 +75,7 @@ trait EloquentBuilder
         $page = $request->get('page', $this->defaults['page']);
         $filters = $request->only(array_keys($this->allowableFilters)) ?? $this->defaults['filters'];
         $query = $request->get('query', $this->defaults['query']);
-        $includes = $this->parseIncludes($request->get('includes', $this->defaults['includes']);
+        $includes = $this->parseIncludes($request->get('includes', $this->defaults['includes']));
 
         if ($page !== null && $limit === null) {
             throw new InvalidArgumentException('Cannot use page option without limit option');
@@ -229,7 +229,7 @@ trait EloquentBuilder
         if (!is_array($includes)) {
             throw new InvalidArgumentException('Includes should be an array.');
         }
-        
+
         $queryBuilder->with($includes);
 
         return $queryBuilder;
