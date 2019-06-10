@@ -36,20 +36,24 @@ trait EloquentBuilder
      */
     protected function parseIncludes(array $includes)
     {
-        $return = [
-            'includes' => [],
-            'modes' => []
-        ];
-        foreach ($includes as $include) {
-            $explode = explode(':', $include);
-            if (!isset($explode[1])) {
-                $explode[1] = camel_case($this->defaults['mode']);
-            }
-            $return['includes'][] = $explode[0];
-            $return['modes'][$explode[0]] = $explode[1];
-        }
+        return array_filter($includes, function ($include) {
+            return in_array($include, array_keys($this->allowableRelationships));
+        });
 
-        return $return;
+//        $return = [
+//            'includes' => [],
+//            'modes' => []
+//        ];
+//        foreach ($includes as $include) {
+//            $explode = explode(':', $include);
+//            if (!isset($explode[1])) {
+//                $explode[1] = camel_case($this->defaults['mode']);
+//            }
+//            $return['includes'][] = $explode[0];
+//            $return['modes'][$explode[0]] = $explode[1];
+//        }
+//
+//        return $return;
     }
 
     /**
@@ -71,9 +75,7 @@ trait EloquentBuilder
         $page = $request->get('page', $this->defaults['page']);
         $filters = $request->only(array_keys($this->allowableFilters)) ?? $this->defaults['filters'];
         $query = $request->get('query', $this->defaults['query']);
-        $includes = array_filter($request->get('includes', $this->defaults['includes']), function ($include) {
-            return in_array($include, array_keys($this->allowableRelationships));
-        });
+        $includes = $this->parseIncludes($request->get('includes', $this->defaults['includes']);
 
         if ($page !== null && $limit === null) {
             throw new InvalidArgumentException('Cannot use page option without limit option');
@@ -124,10 +126,10 @@ trait EloquentBuilder
             $this->applyQueryFilter($queryBuilder, $options['query']);
 
         if ($this->defaultRelationships)
-            $this->applyIncludes($queryBuilder, array_keys($this->defaultRelationships));
+            $this->applyRelationships($queryBuilder, array_keys($this->defaultRelationships));
 
         if ($options['includes'])
-            $this->applyIncludes($queryBuilder, $options['includes']);
+            $this->applyRelationships($queryBuilder, $options['includes']);
 
         if ($options['sorting'])
             $this->applySorting($queryBuilder, $options['sorting']);
@@ -222,16 +224,12 @@ trait EloquentBuilder
      * @param array $previouslyJoined
      * @return array
      */
-    protected function applyIncludes($queryBuilder, array $includes = [])
+    protected function applyRelationships($queryBuilder, array $includes = [])
     {
         if (!is_array($includes)) {
             throw new InvalidArgumentException('Includes should be an array.');
         }
-
-        foreach ($includes as $include)
-            if (!in_array($include, $this->allowableRelationships))
-                throw new InvalidArgumentException('Includes: \'' . $include . '\' can not be included.');
-
+        
         $queryBuilder->with($includes);
 
         return $queryBuilder;
