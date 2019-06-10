@@ -161,7 +161,7 @@ trait EloquentBuilder
     protected function applyQueryFilter($queryBuilder, $value) {
         $filters = [];
         foreach ($this->queryFilters as $queryFilter) {
-            if (in_array($queryFilter, $this->allowableFilters))
+            if (in_array($queryFilter, array_keys($this->allowableFilters)))
                 $filters[$queryFilter] = $value;
         }
         if ($filters) {
