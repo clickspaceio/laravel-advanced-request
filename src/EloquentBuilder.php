@@ -162,7 +162,11 @@ trait EloquentBuilder
         $queryBuilder->orWhere(function ($queryBuilder) use ($value) {
             $filters = [];
             foreach ($this->queryFilters as $queryFilter) {
-                $filters[$queryFilter] = $value;
+                if (in_array($queryFilter, $this->allowableFilters))
+                    $filters[$queryFilter] = $value;
+            }
+            if (!$filters) {
+                $queryBuilder->whereRaw('1 = 2');
             }
             $this->applyFilters($queryBuilder, $filters, true);
         });
