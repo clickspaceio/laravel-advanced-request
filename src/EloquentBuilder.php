@@ -147,29 +147,30 @@ trait EloquentBuilder
     }
 
     protected function applyFilters($queryBuilder, $filters, $or = false) {
-        call_user_func([$queryBuilder, $or ? "orWhere" : "where"], function ($queryBuilder) use ($filters) {
-            foreach ($filters as $key => $value) {
+        foreach ($filters as $key => $value) {
+            call_user_func([$queryBuilder, $or ? "orWhere" : "where"], function ($queryBuilder) use ($key, $value) {
                 if (gettype($queryBuilder->getModel()->{$key}) != "NULL" and is_array($value) == true) {
                     $this->applyRelationshipFilter($queryBuilder, $key, $value);
                 } else {
                     $this->applyFilter($queryBuilder, $key, $value);
                 }
-            }
-        });
+            });
+        }
     }
 
     protected function applyQueryFilter($queryBuilder, $value) {
-        $queryBuilder->orWhere(function ($queryBuilder) use ($value) {
-            $filters = [];
-            foreach ($this->queryFilters as $queryFilter) {
-                if (in_array($queryFilter, $this->allowableFilters))
-                    $filters[$queryFilter] = $value;
-            }
-            if (!$filters) {
-                $queryBuilder->whereRaw('1 = 2');
-            }
-            $this->applyFilters($queryBuilder, $filters, true);
-        });
+        $filters = [];
+        foreach ($this->queryFilters as $queryFilter) {
+            if (in_array($queryFilter, $this->allowableFilters))
+                $filters[$queryFilter] = $value;
+        }
+        if ($filters) {
+            $queryBuilder->orWhere(function ($queryBuilder) use ($filters) {
+                $this->applyFilters($queryBuilder, $filters, true);
+            });
+        } else {
+            $queryBuilder->whereRaw('1 = 2');
+        }
     }
 
     protected function applyFilter($query, $key, $value) {
