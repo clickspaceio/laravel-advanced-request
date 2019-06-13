@@ -141,7 +141,8 @@ trait EloquentBuilder
     {
         $query->whereHas($key, function ($query) use ($request, $key) {
             foreach ($request as $keyChild => $value) {
-                $this->applyFilter($query, $key . "." . $keyChild, $value);
+                $this->applyFilter($query, $keyChild, $value);
+//                $this->applyFilter($query, $key . "." . $keyChild, $value);
             }
         });
     }
@@ -149,7 +150,7 @@ trait EloquentBuilder
     protected function applyFilters($queryBuilder, $filters, $or = false) {
         foreach ($filters as $key => $value) {
             call_user_func([$queryBuilder, $or ? "orWhere" : "where"], function ($queryBuilder) use ($key, $value) {
-                if (gettype($queryBuilder->getModel()->{$key}) != "NULL" and is_array($value) == true) {
+                if (is_callable([$queryBuilder->getModel(), $key])  and is_array($value) == true) {
                     $this->applyRelationshipFilter($queryBuilder, $key, $value);
                 } else {
                     $this->applyFilter($queryBuilder, $key, $value);
@@ -163,6 +164,10 @@ trait EloquentBuilder
         foreach ($this->queryFilters as $queryFilter) {
             if (in_array($queryFilter, array_keys($this->allowableFilters)))
                 $filters[$queryFilter] = $value;
+            elseif(in_array(str_replace(['[', ']'], ['.', ''], $queryFilter), array_keys($this->allowableFilters))) {
+                parse_str($queryFilter . '='. $value,$filter);
+                $filters = array_merge($filters, $filter);
+            }
         }
         if ($filters) {
             $queryBuilder->where(function ($queryBuilder) use ($filters) {
